@@ -37,20 +37,21 @@ class BoundingBox:
     pt2: The bottom-right point.
     """
     def __init__(self, pts):
-        self.pt1 = pts[0]
-        self.pt2 = pts[1]
+        self.pt1 = tuple(map(int, pts[0]))
+        self.pt2 = tuple(map(int, pts[1]))
         
     def get_pos(self):
-        return ((self.pt1[0] + self.pt2[0]) / 2, (self.pt1[1] + self.pt2[1]) / 2)
+        return (self.pt1[0] + self.pt2[0]) / 2, (self.pt1[1] + self.pt2[1]) / 2
     
-    def get_size(self):
-        return (self.pt2[0] - self.pt1[0], self.pt2[1] - self.pt1[1])
+    def get_width(self):
+        return self.pt2[0] - self.pt1[0]
+        
+    def get_height(self):
+        return self.pt2[1] - self.pt1[1]
     
-    def get_pt1(self):
-        return tuple(map(int, self.pt1))
-    
-    def get_pt2(self):
-        return tuple(map(int, self.pt2))
+    def get_pts(self):
+        return self.pt1, self.pt2
+
         
 class InstanceMatcher:
     def __init__(self, model_folder, preprocessing_steps=[]):
@@ -136,6 +137,7 @@ class InstanceMatcher:
                 model_pts = np.float32(model_pts).reshape((-1,1,2))       
                 target_pts = np.float32(target_pts).reshape((-1,1,2))
                 H, _ = cv.findHomography(model_pts, target_pts, cv.RANSAC, 5.0)
+                
                 pts = np.float32([[0, 0],[model_img_shape[1]-1, model_img_shape[0]-1]]).reshape(-1,1,2)
                 transformed_pts = cv.perspectiveTransform(pts, H).reshape(-1, 2)
                 
