@@ -24,7 +24,7 @@ class Accumulator:
         return self.arr[self.arr > 0]
     
     def get_matching_pts(self, th):
-        x_idxs, y_idxs = np.where(self.arr > th)
+        x_idxs, y_idxs = np.where(self.arr >= th)
         
         matching_pts = []
         
