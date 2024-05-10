@@ -110,18 +110,17 @@ class InstanceMatcher:
             if aa.check_votes():
                 found.append((aa, filename, model_img_shape))
            
-            # if show_accumulator:                
-            #     fig, axes = plt.subplots(1, 2)
-            #     axes[0].imshow(cv.imread(filename)[:,:,::-1])
-            #     axes[0].set_axis_off()
-            #     axes[1].imshow(aa.arr, cmap='jet', interpolation='nearest')
-            #     axes[1].set_axis_off()
-            #     for i in range(aa.arr.shape[0]):
-            #         for j in range(aa.arr.shape[1]):
-            #             axes[1].text(j, i, f"{aa.arr[i, j]:.0f}", ha="center", va="center", color="w")
-            #     plt.suptitle(filename)
-            #     plt.tight_layout()
-            #     plt.show()
+#             fig, axes = plt.subplots(1, 2)
+#             axes[0].imshow(cv.imread(filename)[:,:,::-1])
+#             axes[0].set_axis_off()
+#             axes[1].imshow(aa.arr, cmap='jet', interpolation='nearest')
+#             axes[1].set_axis_off()
+#             for i in range(aa.arr.shape[0]):
+#                 for j in range(aa.arr.shape[1]):
+#                     axes[1].text(j, i, f"{aa.arr[i, j]:.0f}", ha="center", va="center", color="w")
+#             plt.suptitle(filename)
+#             plt.tight_layout()
+#             plt.show()
         
         if th == None:
             try:
