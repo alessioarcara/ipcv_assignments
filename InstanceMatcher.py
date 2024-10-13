@@ -86,24 +86,25 @@ class InstanceMatcher:
         found = []
         for (model, filename, model_img_shape) in self.models:
             matcher = cv.DescriptorMatcher_create(cv.DescriptorMatcher_FLANNBASED)
-            matches = matcher.knnMatch(model.descriptors, target_descriptors, k=2)
+            matches = matcher.knnMatch(target_descriptors, model.descriptors, k=2)
             good_matches = [m for m, n in matches if m.distance < LOWE_THRESHOLD * n.distance]
             
-            aa = Accumulator(target_img.shape, quantization_step)
+            aa = Accumulator((target_img.shape[0] * 2, target_img.shape[1] * 2), quantization_step)
             for m in good_matches:
-                p_j = target_features[m.trainIdx].pt
-                p_i = model.features[m.queryIdx].pt
-                v_i = model.joining_vectors[m.queryIdx]
-                
-                ds = target_features[m.trainIdx].scale / model.features[m.queryIdx].scale
-                da = target_features[m.trainIdx].angle - model.features[m.queryIdx].angle
+                p_j = target_features[m.queryIdx].pt
+                p_i = model.features[m.trainIdx].pt
+                v_i = model.joining_vectors[m.trainIdx]
+
+                ds = target_features[m.queryIdx].scale / model.features[m.trainIdx].scale
+                da = (model.features[m.trainIdx].angle - target_features[m.queryIdx].angle) % 360
+
                 theta = np.radians(da)
                 R = np.array([[np.cos(theta), -np.sin(theta)], 
-                              [np.sin(theta), np.cos(theta)]])
+                            [np.sin(theta),  np.cos(theta)]])
               
-                v_i = ds * np.dot(R, v_i)
+                v_i_transformed = ds * np.dot(R, v_i)
                 
-                barycenter_j = (p_j[0] + v_i[0], p_j[1] + v_i[1])
+                barycenter_j = (p_j[0] + v_i_transformed[0], p_j[1] + v_i_transformed[1])
                 aa.cast_vote(barycenter_j, (p_i, p_j))
             
             aa.nms()
@@ -125,6 +126,7 @@ class InstanceMatcher:
         
         if th == None:
             try:
+                #th = np.mean([aa.get_votes() for aa, _, _ in found])
                 th = np.mean(np.concatenate([aa.get_votes() for aa, _, _ in found]))
             except:
                 return [], []
