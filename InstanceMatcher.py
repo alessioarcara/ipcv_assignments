@@ -86,17 +86,19 @@ class InstanceMatcher:
         found = []
         for (model, filename, model_img_shape) in self.models:
             matcher = cv.DescriptorMatcher_create(cv.DescriptorMatcher_FLANNBASED)
+            # queryIdx -> keypoints1
+            # trainIdx -> keypoints2
             matches = matcher.knnMatch(target_descriptors, model.descriptors, k=2)
             good_matches = [m for m, n in matches if m.distance < LOWE_THRESHOLD * n.distance]
             
-            aa = Accumulator((target_img.shape[0] * 2, target_img.shape[1] * 2), quantization_step)
+            aa = Accumulator((target_img.shape[0] , target_img.shape[1]), quantization_step)
             for m in good_matches:
                 p_j = target_features[m.queryIdx].pt
                 p_i = model.features[m.trainIdx].pt
                 v_i = model.joining_vectors[m.trainIdx]
 
                 ds = target_features[m.queryIdx].scale / model.features[m.trainIdx].scale
-                da = (model.features[m.trainIdx].angle - target_features[m.queryIdx].angle) % 360
+                da = (target_features[m.queryIdx].angle - model.features[m.trainIdx].angle) % 360
 
                 theta = np.radians(da)
                 R = np.array([[np.cos(theta), -np.sin(theta)], 

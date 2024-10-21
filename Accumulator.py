@@ -10,12 +10,12 @@ class Accumulator:
         
     def cast_vote(self, pt, matching_pts):
         x, y = int(pt[0] / self.quantization_step), int(pt[1] / self.quantization_step)
-        if 0 <= x < self.arr.shape[0] and 0 <= y < self.arr.shape[1]:
-            self.arr[(x, y)] += 1
-            if (x, y) in self.matches:
-                self.matches[(x, y)].append(matching_pts)
+        if 0 <= x < self.arr.shape[1] and 0 <= y < self.arr.shape[0]:
+            self.arr[y, x] += 1
+            if (y, x) in self.matches:
+                self.matches[(y, x)].append(matching_pts)
             else: 
-                self.matches[(x, y)] = [matching_pts]
+                self.matches[(y, x)] = [matching_pts]
                 
     def check_votes(self):
         return np.sum(self.arr) > 0
