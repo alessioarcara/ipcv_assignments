@@ -17,12 +17,10 @@ class StarModel:
             self, 
             features, 
             descriptors, 
-            model_img_path, 
             model_shape
         ):
         self.features = features
         self.descriptors = descriptors
-        self.model_img_path = model_img_path 
         self.model_shape = model_shape
         
         pts = np.array([f.pt for f in features])
@@ -56,28 +54,8 @@ class BoundingBox:
     
     def get_pts(self):
         return self.pt1, self.pt2
-    
-    def intersects(self, other):
-        x_overlap = (self.pt1[0] < other.pt2[0]) and (self.pt2[0] > other.pt1[0])
-        y_overlap = (self.pt1[1] < other.pt2[1]) and (self.pt2[1] > other.pt1[1])
-        return x_overlap and y_overlap 
 
-    @staticmethod
-    def group_overlapping_boxes(bboxes):
-        groups = []
-        while bboxes:
-            curr_bbox = bboxes.pop(0)
-            group = [curr_bbox]
 
-            for box in bboxes[:]:
-                if curr_bbox.intersects(box):
-                    group.append(box)
-                    bboxes.remove(box)
-            groups.append(group)
-
-        return groups
-
-        
 class InstanceMatcher:
     LOWE_THRESHOLD  = 0.75
 
@@ -90,7 +68,7 @@ class InstanceMatcher:
     ):
         self.preprocessing_steps = preprocessing_steps or []
         self.feature_detector = feature_detector or cv.SIFT_create()
-        self.models = self._load_models(model_folder)
+        self.models, self.file_loading_order = self._load_models(model_folder)
         if show_models:
             pass
         print(f"Loaded {len(self.models)} models from {model_folder}")
@@ -100,15 +78,17 @@ class InstanceMatcher:
         GHT Offline Phase 
         """
         models = []
-        for filename in glob.glob(f"{model_folder}/*.png"):
+        file_loading_order = {}
+        for idx, filename in enumerate(glob.glob(f"{model_folder}/*.png")):
             model_img = cv.imread(filename)
             if model_img is None:
                 print(f"Couldn't read image: {filename}")
                 continue
 
             features, descriptors = self._compute_features(model_img)
-            models.append(StarModel(features, descriptors, filename, model_img.shape[:2]))
-        return models
+            models.append(StarModel(features, descriptors, model_img.shape[:2]))
+            file_loading_order[idx] = filename
+        return models, file_loading_order 
             
     def preprocess(self, img):
         for preprocess in self.preprocessing_steps:
@@ -120,31 +100,23 @@ class InstanceMatcher:
         features = [Feature(kp) for kp in keypoints]
         return features, descriptors
 
-    def _nms_bboxes(self, bboxes):
-        print(len(bboxes))
-        groups = BoundingBox.group_overlapping_boxes(bboxes.copy())
-
-        non_overlapping_boxes = []
-        for group in groups:
-            group.sort(key=lambda bbox: bbox.confidence, reverse=True)
-            non_overlapping_boxes.append(group[0])
-        return non_overlapping_boxes 
-
-    def _extract_bboxes(self, found): 
+    def _extract_bboxes(self, found_matches): 
         bboxes = []
 
-        for aa, model_img_shape in found:
-            for vote_count, (model_pts, target_pts) in aa.get_matching_pts():
+        for (_, _, model_idx), value in found_matches.items():
+            model_pts = [model_pt for model_pt, _ in value]
+            target_pts = [target_pt for _, target_pt in value]
+            vote_count = len(value)
 
-                model_pts = np.float32(model_pts).reshape((-1,1,2))       
-                target_pts = np.float32(target_pts).reshape((-1,1,2))
+            model_pts = np.float32(model_pts).reshape((-1,1,2))       
+            target_pts = np.float32(target_pts).reshape((-1,1,2))
 
-                H, _ = cv.findHomography(model_pts, target_pts, cv.RANSAC, 5.0)
+            H, _ = cv.findHomography(model_pts, target_pts, cv.RANSAC, 5.0)
                 
-                pts = np.float32([[0, 0],[model_img_shape[1]-1, model_img_shape[0]-1]]).reshape(-1,1,2)
-                transformed_pts = cv.perspectiveTransform(pts, H).reshape(-1, 2)
+            pts = np.float32([[0, 0],[self.models[model_idx].model_shape[1]-1, self.models[model_idx].model_shape[0]-1]]).reshape(-1,1,2)
+            transformed_pts = cv.perspectiveTransform(pts, H).reshape(-1, 2)
                 
-                bboxes.append(BoundingBox(transformed_pts, aa.model_name, vote_count))
+            bboxes.append(BoundingBox(transformed_pts, self.file_loading_order[model_idx], vote_count))
 
         return bboxes
     
@@ -152,7 +124,8 @@ class InstanceMatcher:
         self, 
         target_img_path, 
         quantization_step, 
-        th=4, 
+        nms_th=4,
+        nms_size=5, 
         show_accumulator=False
     ):
         """
@@ -193,27 +166,32 @@ class InstanceMatcher:
                 
                 aa.cast_vote(i, barycenter_j, (p_i, p_j))
             
-        if show_accumulator:
-            pass
-            # InstanceMatcher.display_accumulator(aa)
+        aa_2d, found_matches = aa.nms_3d(min_votes=nms_th, size=nms_size)
 
-        aa.nms_3d(size=5, min_votes=th)
-        return self._extract_bboxes(aa)
+        if show_accumulator:
+            InstanceMatcher.display_accumulator(aa_2d, target_img_path.split("/")[-1])
+        
+        return self._extract_bboxes(found_matches)
     
     @staticmethod
-    def display_accumulator(accumulator, filename):
+    def display_3d_accumulator(accumulator):
         pass
-        # _, axes = plt.subplots(1, 2)
-        # axes[0].imshow(cv.imread(filename)[:,:,::-1])
-        # axes[0].set_axis_off()
-        # axes[1].imshow(accumulator.arr, cmap='jet', interpolation='nearest')
-        # axes[1].set_axis_off()
-        # for i in range(accumulator.arr.shape[0]):
-        #     for j in range(accumulator.arr.shape[1]):
-        #         axes[1].text(j, i, f"{accumulator[i, j]:.0f}", ha="center", va="center", color="w")
-        # plt.suptitle(filename)
-        # plt.tight_layout()
-        # plt.show()
+
+    
+    @staticmethod
+    def display_accumulator(accumulator, target_img_path=""):
+        plt.imshow(accumulator, cmap='jet', interpolation='nearest')
+        plt.axis('off')
+        plt.title(f"Accumulator Heatmap for the scene: {target_img_path}")
+
+        for y in range(accumulator.shape[0]):
+            for x in range(accumulator.shape[1]):
+                plt.text(
+                    x, y, f"{accumulator[y, x]:.0f}", 
+                    ha="center", va="center", color="white"
+                )
+        plt.tight_layout()
+        plt.show()
 
     @staticmethod
     def display_models():

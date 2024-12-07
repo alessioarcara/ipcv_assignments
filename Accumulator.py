@@ -20,35 +20,24 @@ class Accumulator:
             self.arr[y, x, model_idx] += 1
             self.matches.setdefault((y, x, model_idx), []).append(matching_pts)
 
-    def get_matching_pts(self, th=1):
-        y_idxs, x_idxs = np.where(self.arr >= th)
-        matching_pts = [
-        (
-            self.arr[y, x],  # Numero di voti nel punto (y, x).
-            (
-                [model_pt for model_pt, _ in self.matches[(y, x)]],
-                [target_pt for _, target_pt in self.matches[(y, x)]],
-            )
-        )
-            for y, x in zip(y_idxs, x_idxs)
-        ]
-        return matching_pts
-
     def nms_3d(self, min_votes, size=3):
         h, w, _ = self.shape
         b = size // 2
-        
-        padded_arrays = np.pad(self.arr, pad_width=((0, 0), (b, b), (b, b)), mode='constant', constant_values=0)
+
+        padded_array = np.pad(self.arr, pad_width=((b, b), (b, b), (0, 0)), mode='constant', constant_values=0)
         nms_result = np.zeros((h, w))
+        filtered_matches = {}
 
         for y in range(h):
             for x in range(w):
-                window = padded_arrays[:, y:y + size, x:x + size]
-                central_values = padded_arrays[:, y + b, x + b]
-
+                window = padded_array[y:y + size, x:x + size, :]
+                central_values = padded_array[y + b, x + b, :]
+                
                 max_value = np.max(window)
 
                 if np.any(central_values == max_value) and max_value >= min_votes:
                     nms_result[y, x] = max_value
+                    model_idx = np.argmax(central_values)
+                    filtered_matches[(y, x, model_idx)] = self.matches[(y, x, model_idx)]
 
-        return nms_result
+        return nms_result, filtered_matches
