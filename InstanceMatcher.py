@@ -37,11 +37,11 @@ class BoundingBox:
     pt1: The top-left point.
     pt2: The bottom-right point.
     """
-    def __init__(self, pts, model_name, confidence):
+    def __init__(self, pts, model_name, vote_count):
         self.pt1 = tuple(map(int, pts[0]))
         self.pt2 = tuple(map(int, pts[1]))
         self.model_name = model_name
-        self.confidence = confidence
+        self.vote_count = vote_count 
         
     def center(self):
         return (self.pt1[0] + self.pt2[0]) / 2, (self.pt1[1] + self.pt2[1]) / 2
@@ -54,6 +54,9 @@ class BoundingBox:
     
     def get_pts(self):
         return self.pt1, self.pt2
+    
+    def set_color_similarity(self, color_similarity):
+        self.color_similarity = color_similarity
 
 
 class InstanceMatcher:
@@ -71,7 +74,7 @@ class InstanceMatcher:
         self.models, self.file_loading_order = self._load_models(model_folder)
         if show_models:
             pass
-        print(f"Loaded {len(self.models)} models from {model_folder}")
+        print(f"✅ Loaded {len(self.models)} models from {model_folder}")
         
     def _load_models(self, model_folder):
         """
@@ -106,6 +109,7 @@ class InstanceMatcher:
         for (_, _, model_idx), value in found_matches.items():
             model_pts = [model_pt for model_pt, _ in value]
             target_pts = [target_pt for _, target_pt in value]
+
             vote_count = len(value)
 
             model_pts = np.float32(model_pts).reshape((-1,1,2))       
@@ -115,23 +119,75 @@ class InstanceMatcher:
                 
             pts = np.float32([[0, 0],[self.models[model_idx].model_shape[1]-1, self.models[model_idx].model_shape[0]-1]]).reshape(-1,1,2)
             transformed_pts = cv.perspectiveTransform(pts, H).reshape(-1, 2)
-                
+
             bboxes.append(BoundingBox(transformed_pts, self.file_loading_order[model_idx], vote_count))
 
         return bboxes
+
+    def _filter_bboxes_by_color_similarity(self, found_bboxes, target_img_path, color_th, min_bbox_size=10):
+        target_img_lab = cv.cvtColor(cv.imread(target_img_path), cv.COLOR_BGR2Lab)
+        _, target_img_a, target_img_b = cv.split(target_img_lab)
+
+        filtered_boxes = []
+
+        print(f"{80 * '━'}")
+        print(f"🔍✨ 📦 ** STARTING BBOXES FILTERING ** 📦 ✨🔍")
+        print(f"{80 * '━'}")
+        for bbox in found_bboxes:
+            model_img_lab = cv.cvtColor(cv.imread(bbox.model_name), cv.COLOR_BGR2Lab)
+            _, model_a, model_b = cv.split(model_img_lab)
+
+            [x1, y1], [x2, y2] = bbox.get_pts()
+            bbox_w, bbox_h = np.abs(bbox.width()), np.abs(bbox.height())
+
+            if bbox_w < min_bbox_size or bbox_h < min_bbox_size:
+                print(f"🔴 **BBox REJECTED** (size too small: {bbox_w}x{bbox_h})")
+                continue
+
+            # Ensure the bounding box coordinates remain within the target image bounds to avoid flat histograms.
+            target_img_h, target_img_w = target_img_a.shape[:2]
+            x1, x2 = max(0, x1), min(target_img_w, x2)
+            y1, y2 = max(0, y1), min(target_img_h, y2)
+
+            target_clipped_a = target_img_a[y1:y2, x1:x2]
+            target_clipped_b = target_img_b[y1:y2, x1:x2]
+
+            hist_target_clipped_a = InstanceMatcher.get_histogram(target_clipped_a)
+            hist_target_clipped_b = InstanceMatcher.get_histogram(target_clipped_b)
+            hist_model_a = InstanceMatcher.get_histogram(model_a)
+            hist_model_b = InstanceMatcher.get_histogram(model_b)
+
+            similarity_a = cv.compareHist(hist_target_clipped_a, hist_model_a, cv.HISTCMP_CORREL)
+            similarity_b = cv.compareHist(hist_target_clipped_b, hist_model_b, cv.HISTCMP_CORREL)
+
+            bbox.set_color_similarity((similarity_a + similarity_b) / 2)
+
+            if bbox.color_similarity > color_th:
+                print(f"🟢 **BBox PASSED** (similarity = {bbox.color_similarity:.4f})")
+                filtered_boxes.append(bbox)
+            else:
+                print(f"🔴 **BBox REJECTED** (similarity = {bbox.color_similarity:.4f})")
+
+
+        print(f"{80 * '━'}")
+        print(f"🔍✨ 📦  ** FILTERING COMPLETED: {len(filtered_boxes)} out of {len(found_bboxes)} BBOXES ACCEPTED ** 📦 ✨🔍")
+        print(f"{80 * '━'}\n")
+        return filtered_boxes 
     
     def match(
         self, 
         target_img_path, 
         quantization_step, 
         nms_th=4,
-        nms_size=5, 
-        show_accumulator=False
+        nms_size=5,
+        color_th=0.5,
+        show_accumulator=False,
+        show_histogram=False
     ):
         """
         GHT Online Phase 
         """
-        target_img = self.preprocess(cv.cvtColor(cv.imread(target_img_path), cv.COLOR_BGR2RGB))
+        target_img = self.preprocess(cv.cvtColor(cv.imread(target_img_path), cv.IMREAD_GRAYSCALE))
         target_features, target_descriptors = self._compute_features(target_img)
 
         aa = Accumulator(target_img.shape, len(self.models), quantization_step)
@@ -171,12 +227,20 @@ class InstanceMatcher:
         if show_accumulator:
             InstanceMatcher.display_accumulator(aa_2d, target_img_path.split("/")[-1])
         
-        return self._extract_bboxes(found_matches)
+        return self._filter_bboxes_by_color_similarity(
+            self._extract_bboxes(found_matches), 
+            target_img_path, 
+            color_th) 
+        
+    @staticmethod
+    def get_histogram(channel):
+        hist = cv.calcHist([channel], [0], None, [256], [0, 256])
+        cv.normalize(hist, hist, 0, 1, cv.NORM_MINMAX)
+        return hist
     
     @staticmethod
     def display_3d_accumulator(accumulator):
         pass
-
     
     @staticmethod
     def display_accumulator(accumulator, target_img_path=""):
@@ -195,4 +259,8 @@ class InstanceMatcher:
 
     @staticmethod
     def display_models():
+        pass
+
+    @staticmethod
+    def display_histograms():
         pass
