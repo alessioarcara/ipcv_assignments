@@ -4,6 +4,10 @@
 
 **Goal**: Develop a computer vision system that, given a reference image for each product, is able to identify such product from one picture of a store shelf.
 
+**Implementation Details**: We tackle this assignment by implementing from scratch a `Generalized Hough Transform (GHT)` with Local Invariant Features. To improve accuracy, we integrated a color consistency check on the detected bounding boxes to filter out incorrect matches. This improvement is crucial because the GHT processes only greyscale images and cannot differentiate between templates that are visually identical in shape but differ in color.
+
+The provided scene images were significantly ruined by **salt noise**. After conducting a noise analysis, we identified that applying a combination of `Median Filtering, BM3D, Non-Local Means Filtering, and sharpening` significantly increased the number of keypoints detected in the scene images. This improvement greatly enhanced the performance of our algorithm.
+
 ### Example Images:
 
 <p align="center">
