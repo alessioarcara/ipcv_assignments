@@ -10,8 +10,20 @@ The provided scene images were significantly ruined by **salt noise**. After con
 
 ### Example Images:
 
-<p align="center">
-  <img src="https://i.ibb.co/TwkMWnH/Screenshot-2024-04-04-at-14-54-51.png" alt="Store Shelf Example" width="300" />
+<p align="center"> 
+  <img src="./media/star_models.png" alt="Reference product templates used for recognition" width="100%" /> 
+  <br>
+  <em>Figure 1: Reference product templates used for recognition.</em> 
+</p> 
+<p align="center"> 
+  <img src="./media/products_recognition.png" alt="Recognition results on a store shelf image" width="100%" /> 
+  <br>
+  <em>Figure 2: Recognition results on a store shelf image.</em> 
+</p> 
+<p align="center"> 
+  <img src="./media/noise_analysis.png" alt="Noise analysis results with keypoint improvements" width="100%" />
+  <br>
+  <em>Figure 3: Visualization of noise reduction.</em> 
 </p>
 
 ---
