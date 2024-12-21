@@ -32,6 +32,8 @@ The provided scene images were significantly ruined by **salt noise**. After con
 
 **Goal**: Implement a neural network that classifies smartphone pictures of products found in grocery stores.
 
+**Implementation Details**: To facilitate neural network training on our laptops, we explored efficient architectures, focusing particularly on `ShuffleNet`. This architecture builds upon the **depthwise separable convolution** introduced in Xception by incorporating **grouped pointwise convolutions** and a novel **shuffle layer**. Leveraging these shuffle units, we implemented a compact neural network that achieved 72% accuracy on the validation set without any prior knowledge or pretraining. After we use a pretrained net (`Resnet-18`) achieving 91% accuracy also on validation set, showing the impact of transfer learning and prior knowledge in improving model performance. 
+
 ### Example Images:
 
 <p align="center">
